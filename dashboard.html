@@ -779,30 +779,56 @@
                         try {
                             const protocol = window.location.protocol;
                             let response;
+                            let autoLoadSuccess = false;
 
+                            // Try multiple sources in order
                             if (protocol === 'file:') {
                                 // Try direct file fetch (requires --allow-file-access-from-files)
                                 console.log('Attempting direct file access...');
-                                response = await fetch('file:///' + AUTO_LOAD_PATH.replace(/\\/g, '/'));
+                                try {
+                                    response = await fetch('file:///' + AUTO_LOAD_PATH.replace(/\\/g, '/'));
+                                    if (response.ok) autoLoadSuccess = true;
+                                } catch (e) {
+                                    console.log('Direct file access blocked');
+                                }
                             } else {
-                                // Try server fetch
+                                // For HTTP/HTTPS: Try server API first, then fallback to data.xlsx
                                 console.log('Attempting server access...');
-                                response = await fetch('/api/data');
+                                try {
+                                    response = await fetch('/api/data');
+                                    if (response.ok) {
+                                        autoLoadSuccess = true;
+                                        console.log('Loaded from server API');
+                                    }
+                                } catch (e) {
+                                    console.log('Server API not available, trying data.xlsx...');
+                                }
+
+                                // If server failed, try data.xlsx (for Vercel/static deployment)
+                                if (!autoLoadSuccess) {
+                                    try {
+                                        response = await fetch('./data.xlsx');
+                                        if (response.ok) {
+                                            autoLoadSuccess = true;
+                                            console.log('Loaded from data.xlsx');
+                                        }
+                                    } catch (e) {
+                                        console.log('data.xlsx not found');
+                                    }
+                                }
                             }
 
-                            if (response.ok) {
+                            if (autoLoadSuccess && response.ok) {
                                 const arrayBuffer = await response.arrayBuffer();
                                 processArrayBuffer(arrayBuffer);
                             } else {
-                                throw new Error(protocol === 'file:' ? 'Browser blocked file access' : 'Server error: ' + response.status);
+                                throw new Error('No data source available');
                             }
                         } catch (e) {
                             // Fallback: Show upload screen
                             console.log('Auto-load failed:', e.message);
                             setLoading(false);
-                            setMsg(window.location.protocol === 'file:' ?
-                                'To use direct file access, launch with special flags.' :
-                                'Auto-load failed. Drag & drop file manually.');
+                            setMsg('Drag & drop your Excel file to begin');
                         }
                     };
 

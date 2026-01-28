@@ -1,9 +1,10 @@
 # Ignore node_modules
 node_modules/
 
-# Ignore Excel files (optional - remove this line if you want to include sample files)
+# Ignore Excel files EXCEPT data.xlsx
 *.xlsx
 *.xls
+!data.xlsx
 
 # Ignore temporary files
 verify_dates.js
