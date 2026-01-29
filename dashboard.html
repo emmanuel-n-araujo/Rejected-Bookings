@@ -535,6 +535,9 @@
                         
                         if (!jsonData.length) throw new Error("No data found");
 
+
+                        const dataStartRow = range.s.r + 1; // Data starts after header
+
                         const keys = Object.keys(jsonData[0]);
                         const match = (targets) => {
                             for(let t of targets) {
@@ -542,6 +545,15 @@
                                 if(found) return found;
                             }
                             return null;
+                        };
+                        
+                        // Helper to get hyperlink or text
+                        const getLink = (rowIndex, colIndex) => {
+                             const cellAddress = XLSX.utils.encode_cell({c: colIndex, r: rowIndex});
+                             const cell = sheet[cellAddress];
+                             if (cell && cell.l && cell.l.Target) return cell.l.Target; // Excel Hyperlink
+                             if (cell && typeof cell.v === 'string' && (cell.v.startsWith('http') || cell.v.startsWith('www'))) return cell.v; // Raw URL text
+                             return '';
                         };
 
                         // Get headers first to find Column AD (Index 29) safely
@@ -705,8 +717,17 @@
                             const salesAgent = (r[MAP.sales] || '').toString().trim() || '';
                             const agency = (r[MAP.agency] || '').toString().trim() || '';
                             
-                            // Get attachment link
-                            const attachment = (r[MAP.attachment] || '').toString().trim();
+                            // Get attachment link (Try Hyperlink Object in Col AD (29) first, then AC (28), then Text Match)
+                            // Row index calculation: i is index in jsonData. 
+                            const excelRowIdx = dataStartRow + i; 
+                            let attachment = getLink(excelRowIdx, 29); // Priority: Col AD Hyperlink
+                            if (!attachment) attachment = getLink(excelRowIdx, 28); // Fallback: Col AC Hyperlink
+                            if (!attachment) attachment = (r[MAP.attachment] || '').toString().trim(); // Fallback: Mapped Column Text
+                            
+                            // Validate attachment is a URL
+                            if (attachment && !attachment.startsWith('http') && !attachment.startsWith('mailto:')) {
+                                attachment = ''; // Discard if it's just text like "Customer requested..."
+                            }
 
                             return {
                                 formattedRejDate,
@@ -885,22 +906,13 @@
                     </div>
                 );
 
-                const data = useMemo(() => {
-                    if (!rawData) return null;
-                    return rawData.filter(r => {
-                        if (selectedMonth !== 'all' && r.monthYear !== selectedMonth) return false;
-                        if (selectedProject !== 'all' && r.project !== selectedProject) return false;
-                        return true;
-                    });
-                }, [rawData, selectedMonth, selectedProject]);
-
                 const stats = useMemo(() => {
-                    if (!data) return null;
+                    if (!filteredData) return null;
 
                     let tPaid = 0, tEarned = 0, tRefunded = 0, refundedCount = 0, swappedCount = 0;
                     const reasons = {}, salesAgents = {}, agencies = {};
 
-                    data.forEach(r => {
+                    filteredData.forEach(r => {
                         tPaid += r.paid;
                         tEarned += r.earned;
                         if (r.isRefunded) {
@@ -934,12 +946,12 @@
                         totalRefunded: tRefunded,
                         refundedCount,
                         swappedCount,
-                        count: data.length,
+                        count: filteredData.length,
                         top5Reasons: sortedReasons.slice(0, 5),
                         topSalesAgent: sortedSalesAgents[0] || { name: 'N/A', value: 0 },
                         topAgency: sortedAgencies[0] || { name: 'N/A', value: 0 }
                     };
-                }, [data]);
+                }, [filteredData]);
 
                 const formatMoney = (v) => 'AED ' + v.toLocaleString('en-US', { maximumFractionDigits: 0 });
 
@@ -979,12 +991,17 @@
                 return (
                     <>
                         <div className="w-full px-8 pt-4 pb-5 space-y-5">
-                            {/* Header: Logo Left, Title Center with Animated Gradient, Theme Toggle Right */}
-                            <div className="flex items-center animate-in mb-2 relative">
-                                <img src="logo.png" alt="Logo" className="h-24 absolute left-0 animated-logo" style={{ marginTop: '8px' }} />
-                                <h2 className="text-3xl font-bold w-full text-center animated-gradient-text">Rejected Bookings Dashboard</h2>
-                                <div className="absolute right-0">
-                                    <ThemeToggle />
+                            <div className="flex flex-col gap-6 animate-in">
+                                {/* Header with improved mobile layout */}
+                                <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-4 relative">
+                                    <div className="flex items-center gap-4 w-full md:w-auto justify-center md:justify-start">
+                                        <img src="logo.png" alt="Logo" className="h-16 md:h-24 object-contain animated-logo" />
+                                        <div className="hidden md:block w-px h-12 bg-slate-700/50 mx-2"></div>
+                                        <h2 className="text-xl md:text-3xl font-bold text-center md:text-left animated-gradient-text leading-tight">Rejected Bookings<br /><span className="text-slate-500 text-sm md:text-lg font-medium tracking-normal">Dashboard</span></h2>
+                                    </div>
+                                    <div className="absolute top-0 right-0 md:relative">
+                                        <ThemeToggle />
+                                    </div>
                                 </div>
                             </div>
 
@@ -1136,7 +1153,7 @@
                             <div className="glass-card rounded-2xl overflow-hidden animate-in delay-3">
                                 <div className="px-6 py-4 bg-gradient-to-r from-slate-900/80 to-slate-800/60 border-b border-slate-700/50 flex justify-between items-center">
                                     <span className="text-white font-bold text-lg">Booking Details</span>
-                                    <span className="text-xs text-slate-400 font-medium bg-slate-800 px-3 py-1 rounded-full">{Math.min(100, data.length)} of {data.length}</span>
+                                    <span className="text-xs text-slate-400 font-medium bg-slate-800 px-3 py-1 rounded-full">{filteredData.length} Records</span>
                                 </div>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left text-sm">
@@ -1156,17 +1173,17 @@
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-800/40">
-                                            {data.slice(0, 100).map((r, i) => (
-                                                <tr key={i} className="table-row">
+                                            {paginatedData.map((r, i) => (
+                                                <tr key={i} className="table-row group hover:bg-slate-800/30 transition-colors">
                                                     <td className="px-5 py-3 text-white font-medium text-base whitespace-nowrap">{r.formattedRejDate}</td>
                                                     <td className="px-5 py-3 text-cyan-300 font-bold text-base whitespace-nowrap">{r.name}</td>
                                                     <td className="px-5 py-3 text-white text-base whitespace-nowrap">{r.project}</td>
                                                     <td className="px-5 py-3 text-sky-200 text-base whitespace-nowrap">{r.building}</td>
                                                     <td className="px-5 py-3 text-sky-200 text-base whitespace-nowrap">{r.unit}</td>
                                                     <td className="px-5 py-3 text-slate-100 text-base whitespace-nowrap">{r.customer}</td>
-                                                    <td className="px-5 py-3 text-right font-mono text-slate-300 text-base whitespace-nowrap">{r.value.toLocaleString()}</td>
-                                                    <td className="px-5 py-3 text-right font-mono text-amber-300 text-base font-semibold whitespace-nowrap">{r.paid > 0 ? r.paid.toLocaleString() : '-'}</td>
-                                                    <td className="px-5 py-3 text-right font-mono text-emerald-400 text-base font-bold whitespace-nowrap">{r.earned > 0 ? r.earned.toLocaleString() : '-'}</td>
+                                                    <td className="px-5 py-3 text-right text-slate-300 text-base whitespace-nowrap tabular-nums">{r.value.toLocaleString()}</td>
+                                                    <td className="px-5 py-3 text-right text-amber-300 text-base font-semibold whitespace-nowrap tabular-nums">{r.paid > 0 ? r.paid.toLocaleString() : '-'}</td>
+                                                    <td className="px-5 py-3 text-right text-emerald-400 text-base font-bold whitespace-nowrap tabular-nums">{r.earned > 0 ? r.earned.toLocaleString() : '-'}</td>
                                                     <td className="px-5 py-3"><span className="text-base text-rose-400 font-semibold">{r.reason}</span></td>
                                                     <td className="px-4 py-3 text-center">
                                                         {r.attachment ? (
@@ -1182,6 +1199,49 @@
                                         </tbody>
                                     </table>
                                 </div>
+                                {/* Pagination Controls */}
+                                {totalPages > 1 && (
+                                    <div className="px-6 py-4 border-t border-slate-700/50 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-900/40">
+                                        <div className="text-sm text-slate-400">
+                                            Showing <span className="font-medium text-white">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="font-medium text-white">{Math.min(currentPage * itemsPerPage, filteredData.length)}</span> of <span className="font-medium text-white">{filteredData.length}</span> results
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                                disabled={currentPage === 1}
+                                                className="px-4 py-2 text-sm bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                                            >
+                                                Previous
+                                            </button>
+                                            <div className="hidden sm:flex gap-1">
+                                                {/* Simple page numbers */}
+                                                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                                    // Logic to show pages around current
+                                                    let p = i + 1;
+                                                    if (totalPages > 5 && currentPage > 3) p = currentPage - 2 + i;
+                                                    if (p > totalPages) p = p - (p - totalPages);
+                                                    // Simplified: just show current page context
+                                                    return (
+                                                        <button
+                                                            key={p}
+                                                            onClick={() => setCurrentPage(p)}
+                                                            className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm font-medium transition-colors ${currentPage === p ? 'bg-brand-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                                                        >
+                                                            {p}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                            <button
+                                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                                disabled={currentPage === totalPages}
+                                                className="px-4 py-2 text-sm bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                                            >
+                                                Next
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </>
