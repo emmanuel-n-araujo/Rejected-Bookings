@@ -670,7 +670,7 @@
                             return null;
                         };
 
-                        const rows = jsonData.map(r => {
+                        const rows = jsonData.map((r, i) => {
                             const val = parseMoney(r[MAP.val]);
                             const paid = parseMoney(r[MAP.paid]);
                             
