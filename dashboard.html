@@ -906,6 +906,30 @@
                     </div>
                 );
 
+                const [currentPage, setCurrentPage] = useState(1);
+                const itemsPerPage = 50;
+
+                // Compute filtered data
+                const filteredData = useMemo(() => {
+                    if (!rawData) return [];
+                    let d = rawData;
+                    if (selectedMonth !== 'all') d = d.filter(r => r.monthYear === selectedMonth);
+                    if (selectedProject !== 'all') d = d.filter(r => r.project === selectedProject);
+                    return d;
+                }, [rawData, selectedMonth, selectedProject]);
+
+                // Effect to reset page when filters change
+                React.useEffect(() => {
+                    setCurrentPage(1);
+                }, [selectedMonth, selectedProject]);
+
+                // Pagination Logic
+                const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+                const paginatedData = useMemo(() => {
+                    const start = (currentPage - 1) * itemsPerPage;
+                    return filteredData.slice(start, start + itemsPerPage);
+                }, [filteredData, currentPage]);
+
                 const stats = useMemo(() => {
                     if (!filteredData) return null;
 
