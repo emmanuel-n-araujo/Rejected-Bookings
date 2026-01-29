@@ -535,7 +535,7 @@
                         
                         if (!jsonData.length) throw new Error("No data found");
 
-
+                        const range = XLSX.utils.decode_range(sheet['!ref']);
                         const dataStartRow = range.s.r + 1; // Data starts after header
 
                         const keys = Object.keys(jsonData[0]);
