@@ -544,6 +544,10 @@
                             return null;
                         };
 
+                        // Get headers first to find Column AD (Index 29) safely
+                        const headers = XLSX.utils.sheet_to_json(sheet, { header: 1 })[0];
+                        const adHeader = headers && headers[29]; // A=0...AD=29
+
                         const MAP = {
                             val: match(['final sale', 'sale value', 'price', 'amount']),
                             paid: match(['customer paid', 'paid', 'spot cash']),
@@ -559,10 +563,11 @@
                             rsn: match(['reason', 'reject']),
                             age: match(['aging', 'days']),
                             nat: match(['nationality', 'country']),
-                            sales: match(['sales', 'agent', 'sales agent']),
+                            sales: match(['sales', 'agent', 'sales agent', 'sales person']),
                             agency: match(['agency', 'broker', 'agency name']),
                             month: match(['month']),
-                            rejDate: match(['rejected date', 'rejection date', 'date of rejection'])
+                            rejDate: match(['rejected date', 'rejection date', 'date of rejection']),
+                            attachment: adHeader || match(['attachment', 'email', 'link', 'hyperlink', 'ref'])
                         };
 
                         // Extended exclusions: ownership transfer, unit swap, transferred
@@ -699,6 +704,9 @@
                             // Get sales agent and agency - filter out blanks
                             const salesAgent = (r[MAP.sales] || '').toString().trim() || '';
                             const agency = (r[MAP.agency] || '').toString().trim() || '';
+                            
+                            // Get attachment link
+                            const attachment = (r[MAP.attachment] || '').toString().trim();
 
                             return {
                                 formattedRejDate,
@@ -717,7 +725,8 @@
                                 reason,
                                 aging: age,
                                 salesAgent: salesAgent,
-                                agency: agency
+                                agency: agency,
+                                attachment: attachment
                             };
                         });
 
@@ -1003,7 +1012,7 @@
                             )}
 
                             {/* KPI Cards - Icon Left, Content Centered */}
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3 animate-in delay-1">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3 animate-in delay-1">
                                 {/* Rejected Bookings - First */}
                                 <div className="glass-card kpi-card rounded-xl p-4 border-l-4 border-indigo-500 flex items-center gap-3">
                                     <svg className="w-6 h-6 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
@@ -1143,6 +1152,7 @@
                                                 <th className="px-5 py-4 whitespace-nowrap text-center">Paid</th>
                                                 <th className="px-5 py-4 whitespace-nowrap text-emerald-400 text-center">Earned</th>
                                                 <th className="px-5 py-4 text-center" style={{ minWidth: '200px' }}>Reason</th>
+                                                <th className="px-4 py-3 text-center text-xs font-bold text-slate-400 uppercase tracking-wider">Reference</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-800/40">
@@ -1158,6 +1168,15 @@
                                                     <td className="px-5 py-3 text-right font-mono text-amber-300 text-base font-semibold whitespace-nowrap">{r.paid > 0 ? r.paid.toLocaleString() : '-'}</td>
                                                     <td className="px-5 py-3 text-right font-mono text-emerald-400 text-base font-bold whitespace-nowrap">{r.earned > 0 ? r.earned.toLocaleString() : '-'}</td>
                                                     <td className="px-5 py-3"><span className="text-base text-rose-400 font-semibold">{r.reason}</span></td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        {r.attachment ? (
+                                                            <a href={r.attachment} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-800 hover:bg-cyan-500/20 text-slate-400 hover:text-cyan-400 transition-colors border border-slate-700 hover:border-cyan-500/30" title="Open Reference">
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                                                            </a>
+                                                        ) : (
+                                                            <span className="text-slate-600">-</span>
+                                                        )}
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>
