@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 const PORT = 3000;
-const EXCEL_PATH = 'C:\\Users\\Norton Araujo\\ONE Development\\Strategy & Analytics - Documents\\03 Users\\Norton\\Rejected Bookings (Master).xlsx';
+const EXCEL_PATH = path.join(__dirname, 'data.xlsx');
 
 const mimeTypes = {
     '.html': 'text/html',
